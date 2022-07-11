@@ -1,20 +1,26 @@
+from ast import excepthandler
 from openpyxl import Workbook
 from openpyxl import load_workbook
-
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-import time
+import time, datetime
 import random
 import os
 import requests
 from loguru import logger
 import base64
+from slugify import slugify
 
-city_list = ['tomsk']
+city_files = open('city_list_work.txt', 'r')
+city_list = [line for line in city_files.readlines()]
+print(city_list)
+
+a = b
 icon_dict = {
     'M4 12a7.83 7.83 0 0 0 8 8 8.67 8.67 0 0 0 3.41-.71l-.82-1.83A6.6 6.6 0 0 1 12 18a5.87 5.87 0 0 1-6-6 5.82 5.82 0 0 1 6.05-6A5.85 5.85 0 0 1 18 12v.5a1.5 1.5 0 0 1-3 0V8h-1.5l-.5.35A3.45 3.45 0 0 0 11.5 8 3.5 3.5 0 0 0 8 11.5v1a3.49 3.49 0 0 0 6 2.44 3.49 3.49 0 0 0 6-2.44V12a7.8 7.8 0 0 0-7.95-8A7.85 7.85 0 0 0 4 12zm7.5 2a1.5 1.5 0 0 1-1.5-1.5v-1a1.5 1.5 0 0 1 3 0v1a1.5 1.5 0 0 1-1.5 1.5': 'email',
     'M14 14l-1.08 1.45a13.61 13.61 0 0 1-4.37-4.37L10 10a18.47 18.47 0 0 0-.95-5.85L9 4H5.06a1 1 0 0 0-1 1.09 16 16 0 0 0 14.85 14.85 1 1 0 0 0 1.09-1V15h-.15A18.47 18.47 0 0 0 14 14z': 'phone',
@@ -28,6 +34,7 @@ icon_dict = {
     'm10.758 6.03-.273-1.09a1.562 1.562 0 1 1 3.03 0l-.273 1.09a1.28 1.28 0 0 1-2.485 0ZM10 20v-5H9a1 1 0 0 1-1-1v-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4a1 1 0 0 1-1 1h-1v5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1Z': 'visit_statistics',
 }
 
+next_icon = 'M15.793 9.4l1.414 1.414L12 16.024l-5.207-5.21L8.207 9.4 12 13.195z'
 data_info = {
             'city': '',
             'title': '',
@@ -45,14 +52,6 @@ data_info = {
             'phone_3': '',
             'url': '',
         }
-try:
-    wb = load_workbook('info.xlsx')
-    ws = wb.active
-except:
-    wb = Workbook()
-    ws = wb.active
-    ws.append(list(data_info.items()))
-
 clean_text_lits = ['Показать вход', 'Открыто', 'Закрыто']
 
 chrome_options = Options()
@@ -68,69 +67,127 @@ driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), opti
 
 print('Start Work Scripts')
 
-base_url = "https://2gis.ru/{city}/search/Аптеки"
+base_url = "https://2gis.ru/{city}/search/школа%20программирования"
+# base_url = str(input(r"Вставьте ссылку заменив город на {city}"))
 
-base_url = str(input(r"Вставьте ссылку заменив город на {city}"))
+name_search = base_url[base_url.find('search/')+7:]
+if name_search.find('/'):
+    name_search = name_search[:name_search.find('/')]
+name_search=slugify(name_search)
+for item in '0123456789':
+    name_search = name_search.replace(item, '')
+date_now = datetime.datetime.now().strftime("%Y_%m_%dT%H_%M")
+file_name = f"{date_now}--{name_search}.xlsx"
 
-for city in city_list:
-    base_url = base_url.replace(r"{city}", city)
-    driver.get(base_url)
+try:
+    wb = load_workbook(file_name)
+    ws = wb.active
+except:
+    wb = Workbook()
+    ws = wb.active
+    ws.append(list(data_info))
+
+
+def get_info_in_page(driver, page):
     # _1hf7139
     element_list = driver.find_elements(By.CLASS_NAME, "_1hf7139")
     count = 0
     skip = 0
-    page = 1
-    logger.info('Start script')
     for element in element_list:
-        try:
-            element.click()
-        except:
-            skip += 1
-            logger.error(f'SKIP: {skip} / {len(element_list)}. Page: {page}')
-            continue
-        time.sleep(3)
-        right_elem = driver.find_element(By.CLASS_NAME, "_18lzknl")
-        title = right_elem.find_element(By.CLASS_NAME, "_oqoid").text
-        count += 1
-        logger.info(f'PARS: {count} / {len(element_list)}. Page: {page}. {title}')
         element_dict = data_info
-        element_dict.update({
-            'title': title,
-            'city': city,
-            'url': driver.current_url,
-            })
-        
-        for el in right_elem.find_elements(By.CLASS_NAME, "_172gbf8"):
-            svg_path = el.find_element(By.TAG_NAME, 'path').get_attribute('d')
-            el_title = icon_dict.get(svg_path, svg_path)
-            if el_title == 'phone':
-                phone_el = el.find_elements(By.TAG_NAME, "a")
-                for numb in range(len(phone_el)):
-                    phone_href = str(phone_el[numb].get_attribute('href')).replace('tel:', '')
-                    element_dict.update({f'phone_{numb+1}': phone_href})
-            else:
-                el_text = el.find_element(By.CLASS_NAME, "_49kxlr").text
-                for clean in clean_text_lits:
-                    el_text.replace(clean, '')
-                element_dict.update({el_title: el_text})
-        
-        # Соц. Сети
-        for el in right_elem.find_elements(By.CLASS_NAME, "_14uxmys"):
-            el_href = el.find_element(By.TAG_NAME, "a").get_attribute('href')
-            el_title = el.find_element(By.TAG_NAME, "a").get_attribute('aria-label')
-            # Нормализация ссылки соц сети
-            driver.switch_to.new_window('tab')
-            driver.get(el_href)
-            time.sleep(2)
-            el_href = driver.current_url
-            driver.close()
-            driver.switch_to.window(driver.window_handles[0])
-            element_dict.update({el_title: el_href})
-        
+        try:
+            try:
+                actions = ActionChains(driver)
+                actions.move_to_element(element).perform()
+            except:
+                pass
+            try:
+                element.click()
+            except:
+                skip += 1
+                logger.error(f'Page: {page}. SKIP: {skip} / {len(element_list)}.')
+                continue
+            time.sleep(3)
+            right_elem = driver.find_element(By.CLASS_NAME, "_18lzknl")
+            title = right_elem.find_element(By.CLASS_NAME, "_oqoid").text
+            count += 1
+            logger.info(f'Page: {page}. PARS: {count} / {len(element_list)}. {title}')
+            element_dict.update({
+                'title': title,
+                'city': city,
+                'url': driver.current_url,
+                })
+            
+            for el in right_elem.find_elements(By.CLASS_NAME, "_172gbf8"):
+                svg_path = el.find_element(By.TAG_NAME, 'path').get_attribute('d')
+                el_title = icon_dict.get(svg_path, svg_path)
+                if el_title == 'phone':
+                    phone_el = el.find_elements(By.TAG_NAME, "a")
+                    for numb in range(len(phone_el)):
+                        phone_href = str(phone_el[numb].get_attribute('href')).replace('tel:', '')
+                        element_dict.update({f'phone_{numb+1}': phone_href})
+                else:
+                    el_text = el.find_element(By.CLASS_NAME, "_49kxlr").text
+                    for clean in clean_text_lits:
+                        el_text.replace(clean, '')
+                    element_dict.update({el_title: el_text})
+            
+            # Соц. Сети
+            for el in right_elem.find_elements(By.CLASS_NAME, "_14uxmys"):
+                try:
+                    el_href = el.find_element(By.TAG_NAME, "a").get_attribute('href')
+                    el_title = el.find_element(By.TAG_NAME, "a").get_attribute('aria-label')
+                    # Нормализация ссылки соц сети
+                    driver.switch_to.new_window('tab')
+                    driver.get(el_href)
+                    time.sleep(2)
+                    el_href = driver.current_url
+                    driver.close()
+                    driver.switch_to.window(driver.window_handles[0])
+                    element_dict.update({el_title: el_href})
+                except:
+                    pass
+
+        except:
+            pass
         ws.append(list(element_dict.values()))
-        wb.save('info.xlsx')
+        wb.save(file_name)
         time.sleep(random.randint(2, 6))
+
+
+logger.info('Start script')
+
+for city in city_list:
+    logger.info(f'Start city: {city}')
+    base_url = base_url.replace(r"{city}", city)
+    driver.get(base_url)
+    page_not_found = 0
+    page_count = 1
+
+    driver.find_element(By.CLASS_NAME, "_euwdl0").click()
+    get_info_in_page(driver, 1)
+    while page_not_found < 11:
+        page = driver.find_element(By.CLASS_NAME, "_1x4k6z7")
         
+        actions = ActionChains(driver)
+        actions.move_to_element(page).perform()
+
+        pp = page.find_elements(By.CLASS_NAME, "_12164l30")
+        for item in pp:
+            try:
+                if item.text:
+                    if int(item.text) == page_count + 1:
+                        page_count += 1
+                        item.click()
+                        time.sleep(4)
+                        get_info_in_page(driver, page_count)
+                    else:
+                        page_not_found += 1
+            except Exception as e:
+                logger.error(e)
+        time.sleep(2)
+
+
     time.sleep(3)
 
 
