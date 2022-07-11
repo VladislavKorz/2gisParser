@@ -16,11 +16,17 @@ from loguru import logger
 import base64
 from slugify import slugify
 
-city_files = open('city_list_work.txt', 'r')
-city_list = [line for line in city_files.readlines()]
+
+# base_url = "https://2gis.ru/_city_/search/школа программирования"
+key_word = str(input(r"Введите, какую категорию ищем: "))
+base_url = input(r"Вставите ссылку заменив город на _city_: ")
+if not base_url:
+    base_url = f"https://2gis.ru/_city_/search/{key_word}".replace(' ', '%20')
+
+city_files = open('city_list_work.txt', 'r', encoding="utf-8")
+city_list = [slugify(line.replace('\n', '')) for line in city_files.readlines()]
 print(city_list)
 
-a = b
 icon_dict = {
     'M4 12a7.83 7.83 0 0 0 8 8 8.67 8.67 0 0 0 3.41-.71l-.82-1.83A6.6 6.6 0 0 1 12 18a5.87 5.87 0 0 1-6-6 5.82 5.82 0 0 1 6.05-6A5.85 5.85 0 0 1 18 12v.5a1.5 1.5 0 0 1-3 0V8h-1.5l-.5.35A3.45 3.45 0 0 0 11.5 8 3.5 3.5 0 0 0 8 11.5v1a3.49 3.49 0 0 0 6 2.44 3.49 3.49 0 0 0 6-2.44V12a7.8 7.8 0 0 0-7.95-8A7.85 7.85 0 0 0 4 12zm7.5 2a1.5 1.5 0 0 1-1.5-1.5v-1a1.5 1.5 0 0 1 3 0v1a1.5 1.5 0 0 1-1.5 1.5': 'email',
     'M14 14l-1.08 1.45a13.61 13.61 0 0 1-4.37-4.37L10 10a18.47 18.47 0 0 0-.95-5.85L9 4H5.06a1 1 0 0 0-1 1.09 16 16 0 0 0 14.85 14.85 1 1 0 0 0 1.09-1V15h-.15A18.47 18.47 0 0 0 14 14z': 'phone',
@@ -55,7 +61,11 @@ data_info = {
 clean_text_lits = ['Показать вход', 'Открыто', 'Закрыто']
 
 chrome_options = Options()
-# chrome_options.add_argument("--headless")
+
+# Скрыть браузер
+# chrome_options.add_argument("--headless") 
+
+
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
 chrome_options.add_argument('--disable-notifications')
 chrome_options.add_argument("--mute-audio")
@@ -63,21 +73,19 @@ chrome_options.add_argument("--mute-audio")
 # chrome_options.add_argument('--ignore-certificate-errors-spki-list') #handshake failed; returned -1, SSL error code 1, net_error -101
 
 
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
 print('Start Work Scripts')
 
-base_url = "https://2gis.ru/{city}/search/школа%20программирования"
-# base_url = str(input(r"Вставьте ссылку заменив город на {city}"))
 
-name_search = base_url[base_url.find('search/')+7:]
-if name_search.find('/'):
-    name_search = name_search[:name_search.find('/')]
-name_search=slugify(name_search)
-for item in '0123456789':
-    name_search = name_search.replace(item, '')
-date_now = datetime.datetime.now().strftime("%Y_%m_%dT%H_%M")
-file_name = f"{date_now}--{name_search}.xlsx"
+
+# name_search = base_url[base_url.find('search/')+7:]
+# if name_search.find('/'):
+#     name_search = name_search[:name_search.find('/')]
+# name_search=slugify(name_search)
+# for item in '0123456789':
+#     name_search = name_search.replace(item, '')
+date_now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M")
+file_name = f"{date_now}_{slugify(key_word)}.xlsx"
 
 try:
     wb = load_workbook(file_name)
@@ -88,7 +96,8 @@ except:
     ws.append(list(data_info))
 
 
-def get_info_in_page(driver, page):
+def get_info_in_page(driver, page, city):
+    time.sleep(2)
     # _1hf7139
     element_list = driver.find_elements(By.CLASS_NAME, "_1hf7139")
     count = 0
@@ -158,38 +167,47 @@ def get_info_in_page(driver, page):
 logger.info('Start script')
 
 for city in city_list:
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     logger.info(f'Start city: {city}')
-    base_url = base_url.replace(r"{city}", city)
-    driver.get(base_url)
+    base_url_city = base_url.replace(r"_city_", city)
+    logger.info(f'Get URL {base_url_city}')
+    driver.get(base_url_city)
+    logger.info(driver.current_url)
+    time.sleep(4)
     page_not_found = 0
     page_count = 1
 
     driver.find_element(By.CLASS_NAME, "_euwdl0").click()
-    get_info_in_page(driver, 1)
-    while page_not_found < 11:
-        page = driver.find_element(By.CLASS_NAME, "_1x4k6z7")
-        
-        actions = ActionChains(driver)
-        actions.move_to_element(page).perform()
-
-        pp = page.find_elements(By.CLASS_NAME, "_12164l30")
-        for item in pp:
+    get_info_in_page(driver, 1, city)
+    try:
+        while page_not_found < 11:
             try:
-                if item.text:
-                    if int(item.text) == page_count + 1:
-                        page_count += 1
-                        item.click()
-                        time.sleep(4)
-                        get_info_in_page(driver, page_count)
-                    else:
-                        page_not_found += 1
-            except Exception as e:
-                logger.error(e)
-        time.sleep(2)
+                page = driver.find_element(By.CLASS_NAME, "_1x4k6z7")
+            except:
+                page_not_found == 99999
+            
+            actions = ActionChains(driver)
+            actions.move_to_element(page).perform()
 
+            pp = page.find_elements(By.CLASS_NAME, "_12164l30")
+            for item in pp:
+                try:
+                    if item.text:
+                        if int(item.text) == page_count + 1:
+                            page_count += 1
+                            item.click()
+                            time.sleep(4)
+                            get_info_in_page(driver, page_count, city)
+                        else:
+                            page_not_found += 1
+                except Exception as e:
+                    logger.error(e)
+            time.sleep(2)
+    except:
+        pass
 
     time.sleep(3)
 
 
     driver.close()
-driver.quit()
+    driver.quit()
