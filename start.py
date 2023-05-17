@@ -1,31 +1,27 @@
-from ast import excepthandler
-from openpyxl import Workbook
-from openpyxl import load_workbook
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 import time, datetime
 import random
-import os
-import requests
 from loguru import logger
-import base64
 from slugify import slugify
+from openpyxl import Workbook, load_workbook
+import os
 
 
-# base_url = "https://2gis.ru/_city_/search/школа программирования"
-key_word = str(input(r"Введите, какую категорию ищем: "))
-base_url = input(r"Вставите ссылку заменив город на _city_: ")
-if not base_url:
-    base_url = f"https://2gis.ru/_city_/search/{key_word}".replace(' ', '%20')
+base_url = "https://2gis.ru/_city_/search/школа английского"
+key_word = "школа английского"
+# key_word = str(input(r"Введите, какую категорию ищем: "))
+# base_url = input(r"Вставите ссылку заменив город на _city_: ")
+# if not base_url:
+#     base_url = f"https://2gis.ru/_city_/search/{key_word}".replace(' ', '%20')
 
 city_files = open('city_list_work.txt', 'r', encoding="utf-8")
 city_list = [slugify(line.replace('\n', '')) for line in city_files.readlines()]
-print(city_list)
+
 
 icon_dict = {
     'M4 12a7.83 7.83 0 0 0 8 8 8.67 8.67 0 0 0 3.41-.71l-.82-1.83A6.6 6.6 0 0 1 12 18a5.87 5.87 0 0 1-6-6 5.82 5.82 0 0 1 6.05-6A5.85 5.85 0 0 1 18 12v.5a1.5 1.5 0 0 1-3 0V8h-1.5l-.5.35A3.45 3.45 0 0 0 11.5 8 3.5 3.5 0 0 0 8 11.5v1a3.49 3.49 0 0 0 6 2.44 3.49 3.49 0 0 0 6-2.44V12a7.8 7.8 0 0 0-7.95-8A7.85 7.85 0 0 0 4 12zm7.5 2a1.5 1.5 0 0 1-1.5-1.5v-1a1.5 1.5 0 0 1 3 0v1a1.5 1.5 0 0 1-1.5 1.5': 'email',
@@ -86,11 +82,12 @@ print('Start Work Scripts')
 #     name_search = name_search.replace(item, '')
 date_now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M")
 file_name = f"{date_now}_{slugify(key_word)}.xlsx"
+max_count = 0
 
-try:
+if os.path.isfile(file_name):
     wb = load_workbook(file_name)
     ws = wb.active
-except:
+else:
     wb = Workbook()
     ws = wb.active
     ws.append(list(data_info))
@@ -98,8 +95,7 @@ except:
 
 def get_info_in_page(driver, page, city):
     time.sleep(2)
-    # _1hf7139
-    element_list = driver.find_elements(By.CLASS_NAME, "_1hf7139")
+    element_list = driver.find_elements(By.CLASS_NAME, "_17kbpb3")
     count = 0
     skip = 0
     for element in element_list:
@@ -108,17 +104,18 @@ def get_info_in_page(driver, page, city):
             try:
                 actions = ActionChains(driver)
                 actions.move_to_element(element).perform()
-            except:
-                pass
+            except Exception as e:
+                logger.error(f'Page: {page}. SKIP: {skip} / {len(element_list)}. Error: {e}')
+
             try:
                 element.click()
-            except:
+            except Exception as e:
                 skip += 1
-                logger.error(f'Page: {page}. SKIP: {skip} / {len(element_list)}.')
+                logger.error(f'Page: {page}. SKIP: {skip} / {len(element_list)}. Error: {e}')
                 continue
             time.sleep(3)
             right_elem = driver.find_element(By.CLASS_NAME, "_18lzknl")
-            title = right_elem.find_element(By.CLASS_NAME, "_oqoid").text
+            title = right_elem.find_element(By.CLASS_NAME, "_tvxwjf").text
             count += 1
             logger.info(f'Page: {page}. PARS: {count} / {len(element_list)}. {title}')
             element_dict.update({
@@ -154,11 +151,13 @@ def get_info_in_page(driver, page, city):
                     driver.close()
                     driver.switch_to.window(driver.window_handles[0])
                     element_dict.update({el_title: el_href})
-                except:
-                    pass
+                except Exception as e:
+                    logger.error(f'Error: {e}')
 
-        except:
-            pass
+
+        except Exception as e:
+            logger.error(f'Error: {e}')
+
         ws.append(list(element_dict.values()))
         wb.save(file_name)
         time.sleep(random.randint(2, 6))
@@ -203,11 +202,11 @@ for city in city_list:
                 except Exception as e:
                     logger.error(e)
             time.sleep(2)
-    except:
-        pass
+    except Exception as e:
+        logger.error(e)
 
     time.sleep(3)
 
-
+    wb.close()
     driver.close()
     driver.quit()
